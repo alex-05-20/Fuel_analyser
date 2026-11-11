@@ -1,0 +1,35 @@
+name: Actualiser les prix des carburants
+
+on:
+  schedule:
+    - cron: "15 8 * * *"
+      timezone: Europe/Paris
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuel-prices-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_REPO_ID: A1ex-C/fuel-analyser-data
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+    steps:
+      - name: Charger le projet
+        uses: actions/checkout@v4
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements.txt
+      - name: Synchroniser les données
+        run: python -B -m scripts.sync_prices
