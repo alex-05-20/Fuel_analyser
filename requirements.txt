@@ -2,3 +2,4 @@ pandas
 streamlit
 huggingface_hub>=1.0
 python-dotenv
+pyarrow

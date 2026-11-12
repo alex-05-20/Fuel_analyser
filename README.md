@@ -71,3 +71,40 @@ uniquement avec refresh_prices ne sont pas fusionnées automatiquement dans cet 
 En cas de publication concurrente sur le dépôt, le commit échoue pour préserver
 la version distante. Relancer sync_prices reprend la dernière version publiée.
 La planification quotidienne reste à configurer.
+
+## Archives historiques officielles
+
+Pour récupérer toutes les années depuis 2007, jusqu'à l'année courante.
+
+```powershell
+python -B -m scripts.download_annual
+```
+
+Les ZIP restent dans data/raw/annual, avec un fichier manifest.json récapitulant
+les années, sources, tailles, empreintes SHA-256 et nombres d'éléments XML.
+Les archives des années terminées déjà présentes sont relues et vérifiées.
+L'archive de l'année courante est téléchargée à nouveau et reste partielle.
+Les fichiers sont validés par lecture complète du XML compressé avant publication.
+Ces données brutes nécessitent encore la validation des unités, des dates et des
+doublons avant une analyse temporelle. Elles restent distinctes de l'historique
+des collectes quotidiennes dans data/historical/prices_history.csv.
+
+## Préparation annuelle et notebook
+
+Préparer les vingt archives déjà téléchargées, ou une seule année avec --year 2022.
+
+```powershell
+python -B -m scripts.prepare_annual
+python -m pip install -r requirements-notebook.txt
+python -m jupyterlab exploration_annuelle.ipynb
+```
+
+Chaque dossier data/processed/annual/AAAA contient prices.parquet, stations.parquet,
+interruptions.parquet et quality.json. Les prix sont des déclarations, avec les dates
+sources sans fuseau ajouté. L'échelle observée dans les archives est harmonisée
+en divisant les valeurs 2007–2021 par 1 000 et en conservant celles de 2022–2026.
+Les observations invalides sont écartées et comptées. Les doublons exacts sont retirés
+au sein de chaque station. Les prix différents déclarés au même instant sont conservés
+et comptés pour examen. Les prix hors de l'intervalle exploratoire 0,20–5 €/L sont signalés.
+Les dates hors de l'année de l'archive sont signalées et conservées.
+Les périodes d'interruption conservent leurs dates brutes pour une analyse dédiée.
