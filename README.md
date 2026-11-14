@@ -1,110 +1,84 @@
-# Fuel Analyser
+# Fuel Analyser — version locale
 
-Projet Python, Pandas et Streamlit pour explorer les prix des carburants à partir de fichiers, sans SQL.
+Ce paquet contient les archives historiques officielles de 2007 à 2026, les six carburants présents dans la source et les fichiers préparés. L’année 2026 est partielle. Les données incluses permettent de travailler sans Internet, sans compte et sans clé secrète.
 
-## Démarrage sur Windows
+## État de cette livraison
 
-Depuis PowerShell, à la racine du projet, exécuter ces commandes.
+Il s’agit du socle de données et de préparation. Le dashboard précédent a été retiré à la demande de l’étudiant ; la nouvelle interface sera construite ensemble. Aucun app.py n’est fourni à ce stade.
 
-```powershell
+## Installation
+
+Python 3.12 ou plus récent recommandé. Depuis le dossier extrait :
+
+```text
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-## Organisation
+Sous Windows :
 
-- `app.py` et `pages/` hébergent l’interface Streamlit.
-- `src/ingestion/` charge les fichiers sources.
-- `src/processing/` nettoie et transforme les données avec Pandas.
-- `src/analytics/` calcule les indicateurs pour le tableau de bord.
-- `src/storage/` regroupe la lecture et l’écriture des fichiers de travail.
-- `data/raw/`, `data/processed/` et `data/historical/` accueillent les sources, les données traitées et leurs archives.
-- `scripts/` accueille les commandes de préparation. `tests/` accueille les tests.
-- `.streamlit/` contient la configuration de l’application.
+```text
+.venv\Scripts\python.exe -m pip install -r requirements-notebook.txt
+.venv\Scripts\python.exe -m jupyterlab exploration_annuelle.ipynb
+```
 
-## Pipeline de données
+Sous macOS/Linux : utiliser `.venv/bin/python` à la place. L’installation des bibliothèques nécessite Internet si elles ne sont pas déjà disponibles. Le paquet ne contient pas encore d’installateur de dépendances hors ligne ; une fois les bibliothèques installées, le notebook utilise uniquement les fichiers locaux.
 
-Depuis la racine du projet, télécharger le flux officiel et mettre à jour les fichiers.
+## Données incluses
 
-```powershell
+- data/raw/annual : ZIP officiels et manifeste des sources et empreintes.
+- data/processed/annual/AAAA : prix, stations, interruptions en Parquet et rapport qualité JSON.
+- data/raw/archives : sources des collectes locales, lorsqu’elles sont disponibles.
+- data/processed/prices_current.csv : instantané des prix.
+- data/historical/prices_history.csv : changements observés lors des collectes.
+
+Les historiques annuels et l’historique des collectes se recouvrent : ne pas les concaténer sans traitement. La somme des lignes annuelles n’est pas un décompte d’observations uniques entre années. Les horodatages des archives sont conservés sans fuseau ajouté. Les prix atypiques et contradictoires sont signalés ; consulter quality.json. Le notebook charge une année à la fois pour limiter la mémoire.
+
+## Mise à jour facultative avec Internet
+
+```text
+python -B -m scripts.update_local
+```
+
+Utiliser le Python de l’environnement activé. Cette commande contacte uniquement les sources publiques officielles, sans compte. Elle prépare les téléchargements avant publication, rafraîchit l’année courante et la précédente, récupère les années manquantes et met à jour l’instantané ainsi que les changements locaux. Les anciennes années complètes restent conservées. En cas d’échec réseau, la publication n’a pas commencé. Une erreur gérée pendant la publication déclenche une restauration ; une interruption brutale du système n’offre pas de transaction globale garantie. Fermer le notebook avant une mise à jour. Prévoir de l’espace disque pour les fichiers temporaires et les sauvegardes.
+
+Une future interface proposera cette commande sous forme de bouton. Aucune mise à jour ne se lance automatiquement à l’ouverture du notebook.
+
+## Sources et reproductibilité
+
+Source : https://www.data.gouv.fr/datasets/prix-des-carburants-en-france-flux-instantane-v2-amelioree
+Archives : https://donnees.roulez-eco.fr/opendata/annee
+Données du ministère de l’Économie, licence ouverte indiquée sur la source. Les URL, dates de vérification et empreintes sont conservées dans data/raw/annual/manifest.json.
+
+Repréparer les fichiers inclus : `python -B -m scripts.prepare_annual`.
+Le manifeste LIVRAISON.json décrit les fichiers inclus et leurs empreintes SHA-256. Le ZIP n’inclut ni .env, ni environnement virtuel, ni Git, ni outils Hugging Face.
+
+
+## Organisation du dépôt
+
+- `src/ingestion/` : lecture des données sources.
+- `src/processing/` : nettoyage et normalisation.
+- `src/storage/` : fichiers locaux, historique et verrouillage.
+- `src/pipeline.py` : publication d’une collecte locale.
+- `src/analytics/`, `pages/`, `tests/` : emplacements réservés pour la suite.
+- `scripts/` : collecte, préparation, mise à jour et création du ZIP.
+- `exploration_annuelle.ipynb` : exploration locale des archives.
+- `dist/` : livraison générée, exclue de Git.
+
+## Commandes de préparation
+
+Avec l’environnement virtuel activé, depuis la racine du projet :
+
+```text
 python -B -m scripts.refresh_prices
-```
-
-Pour traiter un fichier local, utiliser la même publication et les mêmes règles d'historisation.
-
-```powershell
-python -B -m scripts.prepare_prices chemin/vers/source.csv
-```
-
-Chaque collecte validée produit une archive datée dans data/raw/archives.
-Le fichier data/historical/prices_history.csv conserve les changements observés.
-Le fichier data/processed/prices_current.csv représente le dernier instantané reçu.
-
-La comparaison porte sur le dernier état connu de chaque station et carburant,
-avec ses prix, dates, disponibilité et informations géographiques.
-Une observation identique est ignorée. Le retour à une ancienne valeur est enregistré.
-Les stations absentes du dernier instantané restent dans l'historique et quittent le fichier courant.
-
-observed_at indique la date de collecte en UTC. source_archive désigne le fichier reçu.
-Les données issues de la version précédente sont conservées comme état initial avec ces
-deux champs vides, car leur date de collecte et leur archive ne sont pas connues.
-
-Chaque fichier est remplacé après écriture complète. Un verrou empêche deux publications
-locales simultanées. Après une interruption entre les écritures de l'historique et du fichier
-courant, relancer la collecte rétablit le fichier courant sans répéter les observations identiques.
-La publication cloud et sa planification restent à configurer.
-
-## Synchronisation Hugging Face
-
-La commande suivante recharge l'historique depuis Hugging Face, collecte le flux officiel,
-puis publie la nouvelle archive, l'historique et les prix actuels dans un même commit.
-
-```powershell
-python -B -m scripts.sync_prices
-```
-
-Configurer HF_TOKEN et HF_REPO_ID dans .env ou dans les variables d'environnement.
-Le dépôt distant est la référence pour l'historique lors de cette commande.
-Les fichiers locaux sont actualisés après la publication. Les collectes réalisées
-uniquement avec refresh_prices ne sont pas fusionnées automatiquement dans cet historique cloud.
-En cas de publication concurrente sur le dépôt, le commit échoue pour préserver
-la version distante. Relancer sync_prices reprend la dernière version publiée.
-La planification quotidienne reste à configurer.
-
-## Archives historiques officielles
-
-Pour récupérer toutes les années depuis 2007, jusqu'à l'année courante.
-
-```powershell
 python -B -m scripts.download_annual
-```
-
-Les ZIP restent dans data/raw/annual, avec un fichier manifest.json récapitulant
-les années, sources, tailles, empreintes SHA-256 et nombres d'éléments XML.
-Les archives des années terminées déjà présentes sont relues et vérifiées.
-L'archive de l'année courante est téléchargée à nouveau et reste partielle.
-Les fichiers sont validés par lecture complète du XML compressé avant publication.
-Ces données brutes nécessitent encore la validation des unités, des dates et des
-doublons avant une analyse temporelle. Elles restent distinctes de l'historique
-des collectes quotidiennes dans data/historical/prices_history.csv.
-
-## Préparation annuelle et notebook
-
-Préparer les vingt archives déjà téléchargées, ou une seule année avec --year 2022.
-
-```powershell
 python -B -m scripts.prepare_annual
-python -m pip install -r requirements-notebook.txt
-python -m jupyterlab exploration_annuelle.ipynb
 ```
 
-Chaque dossier data/processed/annual/AAAA contient prices.parquet, stations.parquet,
-interruptions.parquet et quality.json. Les prix sont des déclarations, avec les dates
-sources sans fuseau ajouté. L'échelle observée dans les archives est harmonisée
-en divisant les valeurs 2007–2021 par 1 000 et en conservant celles de 2022–2026.
-Les observations invalides sont écartées et comptées. Les doublons exacts sont retirés
-au sein de chaque station. Les prix différents déclarés au même instant sont conservés
-et comptés pour examen. Les prix hors de l'intervalle exploratoire 0,20–5 €/L sont signalés.
-Les dates hors de l'année de l'archive sont signalées et conservées.
-Les périodes d'interruption conservent leurs dates brutes pour une analyse dédiée.
+`refresh_prices` ne met à jour que le flux courant et son historique local. `download_annual` récupère les ZIP officiels ; `prepare_annual` produit les Parquet. Pour une actualisation regroupée, utiliser `update_local` comme décrit plus haut. `package_local` reconstruit `dist/Fuel_analyser_local.zip` avec une liste explicite de fichiers autorisés.
+
+Le projet ne nécessite ni GitHub ni Hugging Face pour fonctionner. Les dépôts distants existants ne sont pas modifiés par ces commandes.
+
+
+## Livraison finale
+
+Aucun ZIP n’est conservé pendant le développement. La commande `python -B -m scripts.package_local` sera utilisée uniquement lorsque le projet sera terminé.

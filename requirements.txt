@@ -1,5 +1,4 @@
-pandas
+pandas==2.3.3
 streamlit
-huggingface_hub>=1.0
-python-dotenv
-pyarrow
+pyarrow==24.0.0; sys_platform == "win32"
+pyarrow; sys_platform != "win32"
