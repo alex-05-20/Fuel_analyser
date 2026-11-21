@@ -5,9 +5,17 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 /data/raw/*
-/data/processed/*
-/data/historical/*
-!/data/*/.gitkeep
 
 /dist/
 .update-*/
+
+/outputs/
+.ipynb_checkpoints/
+
+/data/cleaned/
+/data/quality/
+
+/data/*.lock
+/data/last_update.json
+
+/data/analytics/

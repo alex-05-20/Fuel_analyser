@@ -1,37 +1,29 @@
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import shutil
+from tempfile import TemporaryDirectory
 from uuid import uuid4
-
 from src.ingestion.prices import read_prices_csv
-from src.processing.prices import normalize_prices
-from src.storage.history import extend_history
-from src.storage.prices import save_prices
+from src.processing.prices import clean_snapshot
 from src.storage.locking import publication_lock
 
 
-def publish_snapshot(source: Path, root: Path) -> tuple[int, int, int]:
-    snapshot = read_prices_csv(source)
-    prices = normalize_prices(snapshot)
-    if snapshot.empty or prices.empty:
-        raise ValueError("Le flux est vide : les fichiers précédents sont conservés.")
-    current = root / "data/processed/prices_current.csv"
-    historical = root / "data/historical/prices_history.csv"
-    with publication_lock(root / "data/processed/publication.lock"):
-        now = datetime.now(timezone.utc)
-        filename = f"prices_{now:%Y%m%dT%H%M%S%fZ}_{uuid4().hex[:8]}.csv"
-        archive = root / "data/raw/archives" / filename
-        archive.parent.mkdir(parents=True, exist_ok=True)
-        history, added = extend_history(
-            prices, historical, current, now, archive.relative_to(root).as_posix()
-        )
-        # Publish the complete archive before the history references it.
-        temporary = archive.with_suffix(".tmp")
-        try:
-            shutil.copyfile(source, temporary)
-            temporary.replace(archive)
-        finally:
-            temporary.unlink(missing_ok=True)
-        save_prices(history, historical)
-        save_prices(prices, current)
-    return len(snapshot), len(prices), added
+def publish_snapshot(source: Path, root: Path):
+    raw=read_prices_csv(source)
+    if raw.empty:raise ValueError('Source vide')
+    cleaned,report=clean_snapshot(raw)
+    with publication_lock(root/'data/cleaned/publication.lock'):
+        folder=root/'data/cleaned';folder.mkdir(parents=True,exist_ok=True)
+        raw_folder=root/'data/raw/snapshots';raw_folder.mkdir(parents=True,exist_ok=True)
+        name=f"prices_{datetime.now(timezone.utc):%Y%m%dT%H%M%S}_{uuid4().hex[:8]}.csv"
+        with TemporaryDirectory(dir=folder) as temp:
+            p=Path(temp)
+            cleaned.to_parquet(p/'current.parquet',index=False,compression='zstd')
+            report.update(source_archive=f'data/raw/snapshots/{name}',cleaned_at_utc=datetime.now(timezone.utc).isoformat())
+            (p/'current.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+            shutil.copy2(source,raw_folder/name)
+            (p/'current.parquet').replace(folder/'current.parquet')
+            quality=root/'data/quality';quality.mkdir(parents=True,exist_ok=True)
+            (p/'current.json').replace(quality/'current.json')
+    return len(raw),len(cleaned),len(report['issues'])

@@ -40,7 +40,7 @@ def install_files(staged, root, backup):
 def update(root):
     root = Path(root)
     with publication_lock(root / "data/update.lock"):
-        with publication_lock(root / "data/processed/publication.lock"):
+        with publication_lock(root / "data/cleaned/publication.lock"):
             with TemporaryDirectory(dir=root, prefix=".update-") as temp:
                 staging = Path(temp) / "staging"
                 raw = staging / "data/raw/annual"
@@ -50,24 +50,18 @@ def update(root):
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {"archives": []}
                 reports = {entry["year"]: entry for entry in manifest["archives"]}
                 for year in range(2007, current_year + 1):
-                    prepared = root / f"data/processed/annual/{year}"
-                    complete = all((prepared / name).exists() for name in ("prices.parquet", "stations.parquet", "interruptions.parquet", "quality.json"))
+                    prepared = root / f"data/cleaned/historical/{year}.parquet"
+                    complete = prepared.exists() and (root / f"data/quality/{year}.json").exists()
                     if year < current_year - 1 and complete and (root / f"data/raw/annual/{year}.zip").exists():
                         continue
                     print(f"Actualisation de {year}…", flush=True)
                     reports[year] = fetch_year(year, current_year, raw)
-                    prepare_year(raw / f"{year}.zip", staging / f"data/processed/annual/{year}")
+                    prepare_year(raw / f"{year}.zip", staging / f"data/cleaned/historical/{year}.parquet")
                 (raw / "manifest.json").write_text(json.dumps({"archives": sorted(reports.values(), key=lambda r: r["year"]), "failed_years": []}, indent=2), encoding="utf-8")
-                for relative in ("data/processed/prices_current.csv", "data/historical/prices_history.csv"):
-                    source = root / relative
-                    if source.exists():
-                        destination = staging / relative
-                        destination.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(source, destination)
                 snapshot = Path(temp) / "snapshot.csv"
                 download_snapshot(snapshot)
                 result = publish_snapshot(snapshot, staging)
-                (staging / "data/last_update.json").write_text(json.dumps({"completed_at_utc": datetime.now(timezone.utc).isoformat(), "stations": result[0], "current_rows": result[1], "new_history_rows": result[2]}, indent=2), encoding="utf-8")
+                (staging / "data/last_update.json").write_text(json.dumps({"completed_at_utc": datetime.now(timezone.utc).isoformat(), "stations": result[0], "current_rows": result[1], "quality_issues": result[2]}, indent=2), encoding="utf-8")
                 install_files(staging, root, Path(temp) / "backup")
                 return result
 
@@ -78,7 +72,7 @@ def main():
     except Exception as error:
         print(f"Mise à jour non terminée ({type(error).__name__}). Les téléchargements sont préparés séparément ; les fichiers précédents restent utilisables en cas d’échec réseau.")
         raise SystemExit(1)
-    print(f"Mise à jour réussie : {stations} stations, {rows} prix actuels, {added} nouvelles observations.")
+    print(f"Mise à jour réussie : {stations} stations, {rows} lignes instantanées, {added} anomalies signalées.")
 
 
 if __name__ == "__main__":

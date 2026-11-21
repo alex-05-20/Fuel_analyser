@@ -44,7 +44,7 @@ def main() -> None:
         downloaded = Path(temporary) / "prices_download.csv"
         download_snapshot(downloaded)
         stations, rows, added = publish_snapshot(downloaded, root)
-    print(f"{stations} stations téléchargées, {rows} lignes actuelles, {added} nouvelles observations historiques.")
+    print(f"{stations} stations téléchargées, {rows} lignes à 47 colonnes, {added} anomalies signalées.")
 
 if __name__ == "__main__":
     main()
